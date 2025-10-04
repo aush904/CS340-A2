@@ -12,6 +12,7 @@ typedef struct chunk {
 } chunk;
 
 static chunk *flist = NULL;
+
 #define HDR ALIGN(sizeof(chunk))
 #define MIN_PAYLOAD 16
 #define MIN_SPLIT (HDR + MIN_PAYLOAD)
@@ -61,10 +62,14 @@ static chunk *find_fit(size_t need){
 static chunk *grow_heap(size_t need){
     size_t want = need + HDR;
     if (want < ARENA_CHUNK) want = ARENA_CHUNK;
-    void *raw = sbrk(want);
+    void *raw = sbrk(want + ALIGNMENT);
     if (raw == (void *)-1) return NULL;
-    chunk *c = (chunk *)raw;
-    c->size = want - HDR;
+    uintptr_t base = (uintptr_t)raw;
+    uintptr_t hdr_addr = ALIGN(base);
+    size_t usable = (size_t)((unsigned char *)raw + want + ALIGNMENT - (unsigned char *)hdr_addr);
+    if (usable < HDR + MIN_PAYLOAD) return NULL;
+    chunk *c = (chunk *)hdr_addr;
+    c->size = ALIGN(usable - HDR);
     c->prev = c->next = NULL;
     insert_sorted(c);
     return coalesce(c);
@@ -105,5 +110,6 @@ void *calloc(size_t nmemb, size_t size){
     memset(user, 0, nmemb * size);
     return user;
 }
+
 
 
