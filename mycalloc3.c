@@ -21,9 +21,23 @@ static chunk *flist = NULL;
 #define ARENA_CHUNK (64 * 1024)
 #define MAGIC ((uint64_t)0xC0FFEE12BADC0DEULL)
 
+typedef struct { unsigned char *start; size_t len; } arena_info;
+static arena_info arenas[256];
+static size_t arena_cnt = 0;
+
 static inline void *user_from_chunk(chunk *c){ return (void *)((unsigned char *)c + HDR); }
 static inline chunk *chunk_from_user(void *p){ return (chunk *)((unsigned char *)p - HDR); }
 static inline unsigned char *chunk_end(chunk *c){ return (unsigned char *)c + HDR + c->size; }
+
+static int is_ours(void *p){
+    unsigned char *u = (unsigned char *)p;
+    for (size_t i = 0; i < arena_cnt; i++){
+        unsigned char *s = arenas[i].start;
+        unsigned char *e = s + arenas[i].len;
+        if (u >= s && u < e) return 1;
+    }
+    return 0;
+}
 
 static void remove_free(chunk *c){
     if (c->prev) c->prev->next = c->next; else flist = c->next;
@@ -75,14 +89,19 @@ static chunk *grow_heap(size_t need){
     c->size = ALIGN_DOWN(usable - HDR);
     c->prev = c->next = NULL;
     c->magic = MAGIC;
+    if (arena_cnt < (sizeof(arenas)/sizeof(arenas[0]))){
+        arenas[arena_cnt].start = (unsigned char *)hdr_addr;
+        arenas[arena_cnt].len   = HDR + c->size;
+        arena_cnt++;
+    }
     insert_sorted(c);
     return coalesce(c);
 }
 
 void free(void *ptr){
     if (!ptr) return;
+    if (!is_ours(ptr)) return;
     chunk *c = chunk_from_user(ptr);
-    if (c == NULL) return;
     if (((uintptr_t)c % ALIGNMENT) != 0) return;
     if (c->magic != MAGIC) return;
     insert_sorted(c);
