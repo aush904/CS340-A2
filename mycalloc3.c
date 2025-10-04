@@ -39,20 +39,22 @@ static void insert_sorted(chunk *c){
 
 static chunk *coalesce(chunk *c){
     if (c->prev && chunk_end(c->prev) == (unsigned char *)c){
-        c->prev->size += HDR + c->size;
+        chunk *p = c->prev;
+        p->size += HDR + c->size;
         remove_free(c);
-        c = c->prev;
+        c = p;
     }
     if (c->next && chunk_end(c) == (unsigned char *)c->next){
-        c->size += HDR + c->next->size;
-        remove_free(c->next);
+        chunk *n = c->next;
+        c->size += HDR + n->size;
+        remove_free(n);
     }
     return c;
 }
 
 static chunk *find_fit(size_t need){
-    for (chunk *c = flist; c; c = c->next)
-        if (c->size >= need) return c;
+    for (chunk *x = flist; x; x = x->next)
+        if (x->size >= need) return x;
     return NULL;
 }
 
@@ -103,4 +105,5 @@ void *calloc(size_t nmemb, size_t size){
     memset(user, 0, nmemb * size);
     return user;
 }
+
 
