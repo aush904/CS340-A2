@@ -17,78 +17,75 @@ static chunk *flist = NULL;
 #define MIN_SPLIT (HDR + MIN_PAYLOAD)
 #define ARENA_CHUNK (64 * 1024)
 
-static inline void *user_from_chunk(chunk *c) { return (void *)((unsigned char *)c + HDR); }
-static inline chunk *chunk_from_user(void *p) { return (chunk *)((unsigned char *)p - HDR); }
-static inline unsigned char *chunk_end(chunk *c) { return (unsigned char *)c + HDR + c->size; }
+static inline void *user_from_chunk(chunk *c){ return (void *)((unsigned char *)c + HDR); }
+static inline chunk *chunk_from_user(void *p){ return (chunk *)((unsigned char *)p - HDR); }
+static inline unsigned char *chunk_end(chunk *c){ return (unsigned char *)c + HDR + c->size; }
 
-static void remove_free(chunk *c) {
+static void remove_free(chunk *c){
     if (c->prev) c->prev->next = c->next; else flist = c->next;
     if (c->next) c->next->prev = c->prev;
     c->prev = c->next = NULL;
 }
 
-static void insert_sorted(chunk *c) {
+static void insert_sorted(chunk *c){
     c->prev = c->next = NULL;
-    if (!flist) { flist = c; return; }
+    if (!flist){ flist = c; return; }
     chunk *p = flist, *last = NULL;
-    while (p && p < c) { last = p; p = p->next; }
+    while (p && p < c){ last = p; p = p->next; }
     c->next = p; c->prev = last;
     if (p) p->prev = c;
     if (last) last->next = c; else flist = c;
 }
 
-static chunk *coalesce(chunk *c) {
-    if (c->prev && chunk_end(c->prev) == (unsigned char *)c) {
+static chunk *coalesce(chunk *c){
+    if (c->prev && chunk_end(c->prev) == (unsigned char *)c){
         c->prev->size += HDR + c->size;
         remove_free(c);
         c = c->prev;
     }
-    if (c->next && chunk_end(c) == (unsigned char *)c->next) {
+    if (c->next && chunk_end(c) == (unsigned char *)c->next){
         c->size += HDR + c->next->size;
         remove_free(c->next);
     }
     return c;
 }
 
-static chunk *find_fit(size_t need) {
+static chunk *find_fit(size_t need){
     for (chunk *c = flist; c; c = c->next)
         if (c->size >= need) return c;
     return NULL;
 }
 
-static chunk *grow_heap(size_t need) {
+static chunk *grow_heap(size_t need){
     size_t want = need + HDR;
     if (want < ARENA_CHUNK) want = ARENA_CHUNK;
-    void *raw = sbrk(want + ALIGNMENT);
+    void *raw = sbrk(want);
     if (raw == (void *)-1) return NULL;
-    uintptr_t base = (uintptr_t)raw;
-    uintptr_t hdr_addr = ALIGN(base);
-    chunk *c = (chunk *)hdr_addr;
-    size_t span = (size_t)((unsigned char *)raw + want + ALIGNMENT - (unsigned char *)c);
-    c->size = ALIGN(span - HDR);
+    chunk *c = (chunk *)raw;
+    c->size = want - HDR;
     c->prev = c->next = NULL;
     insert_sorted(c);
     return coalesce(c);
 }
 
-void free(void *ptr) {
+void free(void *ptr){
     if (!ptr) return;
     chunk *c = chunk_from_user(ptr);
     insert_sorted(c);
     coalesce(c);
 }
 
-void *calloc(size_t nmemb, size_t size) {
+void *calloc(size_t nmemb, size_t size){
     if (nmemb == 0 || size == 0) return NULL;
     if (size && nmemb > ((size_t)-1) / size) return NULL;
     size_t need = ALIGN(nmemb * size);
     chunk *c = find_fit(need);
-    if (!c) {
+    if (!c){
         if (!(c = grow_heap(need))) return NULL;
         c = find_fit(need);
         if (!c) return NULL;
     }
-    if (c->size >= need + MIN_SPLIT) {
+    if (c->size >= need + MIN_SPLIT){
         size_t rem_payload = c->size - need;
         c->size = need;
         chunk *rem = (chunk *)((unsigned char *)c + HDR + need);
@@ -99,8 +96,11 @@ void *calloc(size_t nmemb, size_t size) {
         if (next) next->prev = rem;
         rem->prev = prev; rem->next = next;
         coalesce(rem);
-    } else remove_free(c);
+    } else {
+        remove_free(c);
+    }
     void *user = user_from_chunk(c);
     memset(user, 0, nmemb * size);
     return user;
 }
+
