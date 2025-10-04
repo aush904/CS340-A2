@@ -10,6 +10,7 @@
 typedef struct chunk {
     size_t size;
     struct chunk *prev, *next;
+    uint64_t magic;
 } chunk;
 
 static chunk *flist = NULL;
@@ -18,6 +19,7 @@ static chunk *flist = NULL;
 #define MIN_PAYLOAD 16
 #define MIN_SPLIT (HDR + MIN_PAYLOAD)
 #define ARENA_CHUNK (64 * 1024)
+#define MAGIC ((uint64_t)0xC0FFEE12BADC0DEULL)
 
 static inline void *user_from_chunk(chunk *c){ return (void *)((unsigned char *)c + HDR); }
 static inline chunk *chunk_from_user(void *p){ return (chunk *)((unsigned char *)p - HDR); }
@@ -72,6 +74,7 @@ static chunk *grow_heap(size_t need){
     chunk *c = (chunk *)hdr_addr;
     c->size = ALIGN_DOWN(usable - HDR);
     c->prev = c->next = NULL;
+    c->magic = MAGIC;
     insert_sorted(c);
     return coalesce(c);
 }
@@ -79,6 +82,9 @@ static chunk *grow_heap(size_t need){
 void free(void *ptr){
     if (!ptr) return;
     chunk *c = chunk_from_user(ptr);
+    if (c == NULL) return;
+    if (((uintptr_t)c % ALIGNMENT) != 0) return;
+    if (c->magic != MAGIC) return;
     insert_sorted(c);
     coalesce(c);
 }
@@ -99,6 +105,7 @@ void *calloc(size_t nmemb, size_t size){
         chunk *rem = (chunk *)((unsigned char *)c + HDR + need);
         rem->size = rem_payload - HDR;
         rem->prev = rem->next = NULL;
+        rem->magic = MAGIC;
         chunk *prev = c->prev, *next = c->next;
         if (prev) prev->next = rem; else flist = rem;
         if (next) next->prev = rem;
