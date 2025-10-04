@@ -5,6 +5,7 @@
 
 #define ALIGNMENT 16
 #define ALIGN(x) (((x) + ALIGNMENT - 1) & ~(ALIGNMENT - 1))
+#define ALIGN_DOWN(x) ((x) & ~(ALIGNMENT - 1))
 
 typedef struct chunk {
     size_t size;
@@ -69,7 +70,7 @@ static chunk *grow_heap(size_t need){
     size_t usable = (size_t)((unsigned char *)raw + want + ALIGNMENT - (unsigned char *)hdr_addr);
     if (usable < HDR + MIN_PAYLOAD) return NULL;
     chunk *c = (chunk *)hdr_addr;
-    c->size = ALIGN(usable - HDR);
+    c->size = ALIGN_DOWN(usable - HDR);
     c->prev = c->next = NULL;
     insert_sorted(c);
     return coalesce(c);
@@ -110,6 +111,3 @@ void *calloc(size_t nmemb, size_t size){
     memset(user, 0, nmemb * size);
     return user;
 }
-
-
-
